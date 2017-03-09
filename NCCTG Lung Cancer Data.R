@@ -5,7 +5,11 @@
 # Performance scores rate how well the patient can perform usual daily activities.
 
 # Problem Statement: Is the patient Dead or Not?
-
+library(mice)
+library(VIM)
+library(e1071)
+library(Metrics)
+library(caret)
 
 mydata <- read.csv('http://vincentarelbundock.github.io/Rdatasets/csv/survival/lung.csv', header = T )
 
@@ -33,6 +37,8 @@ mydata2$ph.ecog[is.na(mydata2$ph.ecog)] <- getmode(mydata2$ph.ecog)
 
 summary(mydata2)
 
+table(is.na(mydata2))
+
 id <- sample(228, 160)
 dtrain <- mydata2[id,]
 dtest <- mydata2[-id,]
@@ -49,17 +55,19 @@ str(dtrain)
 dtrain$wt.loss <- scale(dtrain$wt.loss, scale=T)
 dtest$wt.loss <- scale(dtest$wt.loss, scale=T)
 
-library(e1071)
+
 #Naive Bayes
 naive_fit <- naiveBayes(dtrain[,-2], dtrain[,2])
 naive_fit
 
 #Naive Metric
 naive_prediction <- predict(naive_fit, newdata = dtrain[,-2])
-table(naive_prediction, dtrain$status)
+confusionMatrix(table(naive_prediction, dtrain$status)) # 0.743
+
 
 naive_test_pred <- predict(naive_fit, newdata = dtest[,-2])
-table(naive_test_pred, dtest$status)
+x <- table(naive_test_pred, dtest$status)
+confusionMatrix(x) #0.75
 
 
 #Logisitc regression
@@ -71,6 +79,40 @@ log_prediction <- predict(log_fit, newdata = dtrain, type='response')
 log_test_pred <- predict(log_fit, newdata = dtest, type='response')
 
 #confusion matrix
-table(predicted= ifelse(log_prediction>0.5,1,0), actual=dtrain$status)
+x <- table(predicted= ifelse(log_prediction>0.5,1,0), actual=dtrain$status)
+#Train
+confusionMatrix(x) #0.8
 
-table(predicted= ifelse(log_test_pred>0.5,1,0), actual=dtest$status)
+xt<- table(predicted= ifelse(log_test_pred>0.5,1,0), actual=dtest$status)
+confusionMatrix(xt) #0.6912
+
+#Decision Tree
+fitControl <- trainControl(method='cv', number=5)
+
+rpart_fit <- train(status~.,dtrain,'rpart',trControl=fitControl)
+
+
+lf_pred <- predict(rpart_fit, newdata = dtrain)
+x<- table(lf_pred, dtrain$status)
+confusionMatrix(x) #Accuacy = 0.7562
+
+lf_pred <- predict(rpart_fit, newdata = dtest)
+x<- table(lf_pred, dtest$status)
+confusionMatrix(x) #Accuracy = 0.6471
+
+#Random Forest
+rf_fit <- train(status~.,dtrain,'rf',tuneLength=4, nTree=300)
+rf_fit
+
+lf_pred <- predict(rf_fit, newdata = dtrain)
+x<- table(lf_pred, dtrain$status)
+confusionMatrix(x) #Accuacy = 1
+
+lf_pred <- predict(rf_fit, newdata = dtest)
+x<- table(lf_pred, dtest$status)
+confusionMatrix(x) #Accuracy = 0.6618
+
+#Of all the models naive Bayes seems to give the best prediction.
+
+
+
