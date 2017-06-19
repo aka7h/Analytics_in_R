@@ -1,0 +1,145 @@
+---
+title: "AVLearn NPL Social media Analysis"
+author: "Akkash K n R"
+date: "17 June 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tm)
+library(SnowballC)
+library(e1071)
+library(caret)
+```
+
+
+```{r}
+tr <- read.csv('train.csv', header = TRUE, stringsAsFactors = T)
+tr_tweet <- read.csv('train_tweets.csv', header = TRUE, stringsAsFactors = F)
+te <- read.csv('test_tweets.csv', header = TRUE, stringsAsFactors = F)
+
+
+summary(tr)
+summary(tr_tweet)
+summary(te)
+```
+
+##joining thr train and test tweets
+
+
+```{r}
+tr_t <- tr_tweet$Tweet
+
+r1 <- data.frame('t' = tr_tweet$Tweet)
+r2 <- data.frame('t' = te$Tweet)
+da <- rbind(r1,r2)
+```
+
+##Text Preprocession
+
+```{r}
+removeURL <- function(x)  gsub("(f|ht)(tp)(s?)(://)(\\S*)", "", x)
+da$t <- gsub("@\\w+", "", da$t)#removing the twitter handle
+da$t <- gsub("#\\w+", "", da$t)#removing hashtag
+da$t <- gsub("&\\w+", "", da$t)#removing html characters
+da$t <- gsub("([[:alpha:]])\\1{2,}", "\\1",da$t)#removing multiple characters
+da$t <- removeURL(da$t)
+```
+
+
+##Building a Corpus and removing the punctuation,stopwords,white space,
+
+```{r}
+#here we are converting the data into corpus
+doc <- VCorpus(VectorSource(da$t))
+
+doc <- tm_map(doc, tolower) #change it to lower case
+doc <- tm_map(doc, removeNumbers) #removing words
+doc <- tm_map(doc, removeWords, stopwords(kind = 'en'))#removing stopwords
+doc <- tm_map(doc, removePunctuation) #we should not remove punctuations since its a tweet
+doc <- tm_map(doc, stripWhitespace)#remove unwanted white spaces
+doc <- tm_map(doc, stemDocument)#creating stem document
+
+doc <- tm_map(doc, PlainTextDocument)#converting to plain text document
+```
+
+##Creating the Document Term Matrix
+
+```{r}
+
+dtm <- DocumentTermMatrix(doc)
+dim(dtm)
+print(dtm)
+
+dense_dtm <- removeSparseTerms(dtm, 0.995)
+dim(dense_dtm)
+
+tw_dtm <- as.data.frame(as.matrix(dense_dtm))
+colnames(tw_dtm) <- make.names(colnames(tw_dtm))
+
+train_dtm <- tw_dtm[1:35000,]
+test_dtm <- tw_dtm[35001:50000,]
+```
+
+##Splitting the Train to Train adn Validation set
+
+```{r}
+#now lets predict the 
+set.seed(133)
+id <- sample(35000,35000*.75)
+t_dtm <- train_dtm[id,]
+ty_ <- tr$Sentiment[id]
+v_dtm <- train_dtm[-id,]
+vy_ <- tr$Sentiment[-id]
+```
+
+##Implementing Naive bayes
+
+```{r}
+#Naive Bayes
+library(e1071)
+library(caret)
+
+#naiveBayes
+class_nb <- naiveBayes(x=t_dtm,y=ty_,laplace = 100, na.action)
+class_pred <- predict(class_nb, t_dtm)#validation-0.6751 train-0.6827
+tab <- table(class_pred, ty_)
+confusionMatrix(tab)
+class_pred <- predict(class_nb,test_dtm)
+```
+
+```{r}
+#SVM Radial
+# class_svm <- svm(x=t_dtm, y=ty_)
+# class_svm
+# class_pred <- predict(class_svm,t_dtm) #with validation-0.6491 train-0.7314
+# tab <- table(class_pred,ty_)
+# confusionMatrix(tab)
+# class_pred <- predict(class_svm,test_dtm)  public #0.642333
+
+#randomforst
+# library(randomForest)
+# class_rf <- randomForest(x=t_dtm,y=ty_,ntree = 500,importance = T,mtry = 3)
+# class_rf
+# class_pred <- predict(class_rf, v_dtm)#validation-0.6551 train-0.6863 ##train-0.7286 validation-0.6817
+# tab <- table(class_pred, vy_)
+# confusionMatrix(tab) 
+# class_pred <- predict(class_rf,test_dtm)
+```
+
+
+```{r}
+# submission <- data.frame('ID'=te$ID,'Sentiment'=as.character(class_pred))
+# filename <- paste('sentiment_analysis',format(Sys.time(),"%Y%m%d%H%M%s"),sep = '_')
+# write.csv(submission,paste0(filename,'.csv',collapse = ''),row.names = FALSE)
+```
+
+
+
+
+
